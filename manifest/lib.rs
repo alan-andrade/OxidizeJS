@@ -40,7 +40,7 @@ impl ManifestConfig {
 }
 
 pub struct Manifest {
-    paths: Vec<Path>,
+    pub paths: Vec<Path>,
     config: ManifestConfig
 }
 
@@ -115,10 +115,10 @@ impl Manifest {
         &self.paths
     }
 
-    pub fn split<'a> (&'a self, cores: uint) -> Vec<&'a [Path]> {
+    pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
         let mut collector = vec!();
-        for i in self.paths.as_slice().chunks(cores) {
-            collector.push(i.clone());
+        for i in self.get_paths().as_slice().chunks(cores) {
+            collector.push(i);
         }
         collector
     }

@@ -1,8 +1,5 @@
 {
   "manifest":[
-    "js/jquery-2.1.0.js",
-    "js/underscore.js",
-    "js/handlebars-1.1.2.js",
-    "js/*.js"
+    "manifest/test/js/*.js"
   ]
 }

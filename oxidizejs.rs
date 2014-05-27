@@ -6,27 +6,27 @@ use std::io::fs::File;
 use manifest::Manifest;
 
 fn main () {
-    let manifest = Manifest::new("manifest.json");
-    let file_chunks = manifest.split(4);
+    let mut manifest = Manifest::new();
+    let file_chunks = manifest.split(1);
 
     let (tx, rx) = channel();
 
     for (num, files) in file_chunks.iter().enumerate() {
-        println!("chunk: {}", num+1);
         let filenames = pluck_filenames(*files);
-        println!("filenames: {}", filenames.as_slice());
-        tx.send(Command::new("uglifyjs").args(filenames.as_slice()).output());
+        print!("batch {}:", num+1);
+        println!(" {}", filenames.as_slice());
+        tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
     }
 
-    let mut file = File::create(&Path::new("with_channels.js"));
+    let mut file = File::create(&Path::new("test/with_channels.js"));
     for _ in range(0, file_chunks.len()) {
         match rx.recv() {
-            Ok(p_out) => { file.write(p_out.output.as_slice()); },
+            Ok(process) => { file.write(process.wait_with_output().unwrap().output.as_slice()); },
             Err(f) => { fail!("{}", f) }
         }
     }
 }
 
-fn pluck_filenames (files: &[Path]) -> Vec<StrBuf> {
-    files.iter().map(|f| StrBuf::from_str(f.as_str().unwrap())).collect()
+fn pluck_filenames (files: &[Path]) -> Vec<String> {
+    files.iter().map(|f| String::from_str(f.as_str().unwrap())).collect()
 }
