@@ -10,49 +10,86 @@
 //      "js/bar.js",
 //      "js/*.js"
 // ]
-//
-// You can use wildcards.
 #![crate_id = "manifest#0.0.2"]
 #![crate_type = "rlib"]
 
 extern crate serialize;
 extern crate glob;
+extern crate getopts;
 use std::io::fs::File;
 
 pub struct ManifestConfig {
     key: String,
-    path: Path,
-    ext: String
+    source: Path,
+    pub output: Path
 }
 
 impl ManifestConfig {
     pub fn new() -> ManifestConfig {
         ManifestConfig {
             key:  String::from_str("manifest"),
-            path: Path::new("manifest.json"),
-            ext: String::from_str("js")
+            source: Path::new("manifest.json"),
+            output: Path::new("oxidized.js")
         }
-    }
-
-    fn set_path(&mut self, path: Path) {
-        self.path = path
     }
 }
 
 pub struct Manifest {
-    pub paths: Vec<Path>,
-    config: ManifestConfig
+    paths: Vec<Path>,
+    config: ManifestConfig,
+    file: File
 }
 
 impl Manifest {
     pub fn new () -> Manifest {
-        Manifest {
-            config: ManifestConfig::new(),
-            paths: vec!()
+        let config = ManifestConfig::new();
+
+        match File::create(&config.output) {
+            Ok(f) => {
+                Manifest {
+                    config: config,
+                    paths: vec!(),
+                    file: f
+                }
+            },
+            Err(e) => fail!("{}", e)
+        }
+
+    }
+
+    pub fn with_options (matches: &getopts::Matches) -> Manifest {
+        let mut config = ManifestConfig::new();
+
+        match matches.opt_str("f") {
+            Some(file) => config.source = Path::new(file),
+            None => {}
+        }
+
+        match matches.opt_str("o") {
+            Some(file) => config.output = Path::new(file),
+            None => {}
+        }
+
+        match File::create(&config.output) {
+            Ok(f) => {
+                Manifest {
+                    config: config,
+                    paths: vec!(),
+                    file: f
+                }
+            },
+            Err(e) => fail!("{}", e)
         }
     }
 
-    fn get_paths<'a>(&'a mut self) -> &'a Vec<Path> {
+    pub fn write(&mut self, data: &[u8]) {
+        match self.file.write(data) {
+            Err(e) => fail!("{}", e),
+            _ => {}
+        }
+    }
+
+    fn paths<'a>(&'a mut self) -> &'a Vec<Path> {
         self.extract_paths()
     }
 
@@ -60,7 +97,7 @@ impl Manifest {
         use serialize::json;
         use serialize::json::String;
 
-        match File::open(&self.config.path) {
+        match File::open(&self.config.source) {
             Ok(ref mut file) => {
                 let json = match json::from_reader(file as &mut Reader) {
                     Ok(json) => json,
@@ -105,7 +142,7 @@ impl Manifest {
 
         for wc in wildcards.iter() {
             for wc_path in glob(wc.as_str().unwrap()) {
-                if  wc_path.extension() == Some(self.config.ext.as_bytes()) &&
+                if  wc_path.extension() == Some("js".as_bytes()) &&
                     !self.paths.iter().any(|path| path.filename() == wc_path.filename()) {
                     self.paths.push(wc_path);
                 }
@@ -117,12 +154,18 @@ impl Manifest {
 
     pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
         let mut collector = vec!();
-        for i in self.get_paths().as_slice().chunks(cores) {
+        for i in self.paths().as_slice().chunks(cores) {
             collector.push(i);
         }
         collector
     }
 }
+
+//impl<'a> Iterator<&'a Path> for Manifest {
+    //fn next(&'a mut self) -> Option<&'a Path> {
+        //Some(self.paths.get(0))
+    //}
+//}
 
 #[cfg(test)]
 mod test {
@@ -137,7 +180,7 @@ mod test {
         let mut manifesto = Manifest::new();
         manifesto.config = config;
 
-        let paths = manifesto.get_paths();
+        let paths = manifesto.paths();
         assert_eq!(paths.len(), 3);
     }
 
@@ -149,7 +192,7 @@ mod test {
         let mut manifesto = Manifest::new();
         manifesto.config = config;
 
-        let paths = manifesto.get_paths();
+        let paths = manifesto.paths();
         assert_eq!(paths.len(), 3);
     }
 }

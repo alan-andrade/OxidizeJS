@@ -1,1 +1,0 @@
-(function(root){root.a="a"})(this);(function(root){if(root.a==="a"){root.b="b"}else{throw"Error a on b"}})(this);(function(root){if(!root.a==="a"){throw"Error a"}if(!root.b==="b"){throw"Error b"}root.c="abc"})(this);

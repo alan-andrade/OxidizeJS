@@ -1,28 +1,53 @@
 extern crate manifest;
+extern crate getopts;
 
 use std::comm::channel;
 use std::io::Command;
-use std::io::fs::File;
+use std::os;
+use getopts::{usage, optopt, getopts, optflag};
 use manifest::Manifest;
 
 fn main () {
-    let mut manifest = Manifest::new();
-    let file_chunks = manifest.split(1);
+    let args = os::args();
+    let program = args.get(0).clone();
 
+    let options = [
+        optopt("f", "file", "defaults to manifest.json", "input file"),
+        optopt("o", "output", "output file", ""),
+        optflag("h", "help", "Prints this message")
+    ];
+
+    let matches = match getopts(args.tail(), options) {
+        Ok(res) => res,
+        Err(e) => fail!("{}", e)
+    };
+
+    if matches.opt_present("h") {
+        println!("{}", usage(program.as_slice(), options));
+        return
+    }
+
+    let mut manifest = Manifest::with_options(&matches);
+
+    //let file_chunks = manifest.split(1);
     let (tx, rx) = channel();
 
-    for (num, files) in file_chunks.iter().enumerate() {
+    for (num, files) in manifest.split(1).iter().enumerate() {
         let filenames = pluck_filenames(*files);
         print!("batch {}:", num+1);
         println!(" {}", filenames.as_slice());
         tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
     }
 
-    let mut file = File::create(&Path::new("test/with_channels.js"));
-    for _ in range(0, file_chunks.len()) {
+    for _ in range(0, 3) {
         match rx.recv() {
-            Ok(process) => { file.write(process.wait_with_output().unwrap().output.as_slice()); },
-            Err(f) => { fail!("{}", f) }
+            Ok(process) => {
+                match process.wait_with_output() {
+                    Ok(p) => manifest.write(p.output.as_slice()),
+                    Err(e) => fail!("{}", e)
+                };
+            },
+            Err(f) => fail!("{}", f)
         }
     }
 }
