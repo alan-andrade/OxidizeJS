@@ -10,13 +10,8 @@
 //      "js/bar.js",
 //      "js/*.js"
 // ]
-#![crate_id = "manifest#0.0.2"]
-#![crate_type = "rlib"]
-
-extern crate serialize;
-extern crate glob;
-extern crate getopts;
 use std::io::fs::File;
+use getopts::Matches;
 
 pub struct ManifestConfig {
     key: String,
@@ -57,7 +52,7 @@ impl Manifest {
 
     }
 
-    pub fn with_options (matches: &getopts::Matches) -> Manifest {
+    pub fn with_options (matches: &Matches) -> Manifest {
         let mut config = ManifestConfig::new();
 
         match matches.opt_str("f") {
@@ -131,10 +126,11 @@ impl Manifest {
 
     fn expand<'a>(&'a mut self) -> &'a Vec<Path> {
         use glob::glob;
+        use std::io::fs::PathExtensions;
 
         let wildcards: Vec<Path> = self.paths
             .iter()
-            .skip_while(|path| path.is_file())
+            .skip_while(|path| (**path).is_file())
             .map(|path| path.clone())
             .collect();
 

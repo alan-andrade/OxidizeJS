@@ -1,0 +1,8 @@
+[package]
+
+name = "OxidizeJS"
+version = "0.0.1"
+authors = ["Alan Andrade <alan.andradec@gmail.com>"]
+
+[dependencies.glob]
+git = "https://github.com/rust-lang/glob.git"

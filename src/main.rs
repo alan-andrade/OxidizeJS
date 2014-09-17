@@ -1,15 +1,17 @@
-extern crate manifest;
 extern crate getopts;
+extern crate glob;
+extern crate serialize;
 
 use std::comm::channel;
 use std::io::Command;
 use std::os;
 use getopts::{usage, optopt, getopts, optflag};
-use manifest::Manifest;
+
+mod manifest;
 
 fn main () {
     let args = os::args();
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let options = [
         optopt("f", "file", "defaults to manifest.json", "input file"),
@@ -27,7 +29,7 @@ fn main () {
         return
     }
 
-    let mut manifest = Manifest::with_options(&matches);
+    let mut manifest = manifest::Manifest::with_options(&matches);
 
     //let file_chunks = manifest.split(1);
     let (tx, rx) = channel();
@@ -39,7 +41,7 @@ fn main () {
         tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
     }
 
-    for _ in range(0, 3) {
+    for _ in range(0u, 3u) {
         match rx.recv() {
             Ok(process) => {
                 match process.wait_with_output() {
