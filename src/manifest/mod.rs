@@ -109,7 +109,6 @@ impl Manifest {
 
     fn expand<'a>(&'a mut self) -> &'a Vec<Path> {
         use glob::glob;
-        use std::io::fs::PathExtensions;
 
         let wildcards: Vec<Path> = self.paths
             .iter()

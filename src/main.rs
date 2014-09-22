@@ -32,15 +32,17 @@ fn main () {
     let mut manifest = manifest::Manifest::with_options(&matches);
 
     let (tx, rx) = channel();
+    let chunks = manifest.split(4).len();
 
-    for (num, files) in manifest.split(1).iter().enumerate() {
+    for (num, files) in manifest.split(4).iter().enumerate() {
         let filenames = pluck_filenames(*files);
         print!("batch {}:", num+1);
         println!(" {}", filenames.as_slice());
         tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
     }
 
-    for _ in range(0u, 3u) {
+    for _ in range(0u, chunks) {
+        println!("handling...");
         match rx.recv() {
             Ok(process) => {
                 match process.wait_with_output() {
