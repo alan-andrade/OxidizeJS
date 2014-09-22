@@ -22,9 +22,3 @@ Not much really. I just fire up an `uglifyjs` process with different
 chunk of files. The first pass, I don't mangle nor compress.
 
 I uglify it once more after all children processes finish.
-
-## Roadmap
-
-I've heard that playing around with the Js AST might be faster. I'm
-interested in that option but I still don't have the technical
-expertise.
