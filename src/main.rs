@@ -31,10 +31,9 @@ fn main () {
 
     let mut manifest = manifest::Manifest::with_options(&matches);
 
-    //let file_chunks = manifest.split(1);
     let (tx, rx) = channel();
 
-    for (num, files) in manifest.split(1).iter().enumerate() {
+    for (num, files) in manifest.split(4).iter().enumerate() {
         let filenames = pluck_filenames(*files);
         print!("batch {}:", num+1);
         println!(" {}", filenames.as_slice());
@@ -42,6 +41,7 @@ fn main () {
     }
 
     for _ in range(0u, 3u) {
+        println!("ranging");
         match rx.recv() {
             Ok(process) => {
                 match process.wait_with_output() {

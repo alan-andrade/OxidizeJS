@@ -1,7 +1,0 @@
-{
-  "manifest": [
-    "test/js/c.js",
-    "test/js/a.js",
-    "test/js/b.js"
-  ]
-}

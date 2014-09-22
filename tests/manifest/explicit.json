@@ -1,0 +1,7 @@
+{
+  "manifest": [
+    "tests/manifest/js/c.js",
+    "tests/manifest/js/a.js",
+    "tests/manifest/js/b.js"
+  ]
+}

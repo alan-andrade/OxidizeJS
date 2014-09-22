@@ -15,7 +15,7 @@ use getopts::Matches;
 
 pub struct ManifestConfig {
     key: String,
-    source: Path,
+    pub source: Path,
     pub output: Path
 }
 
@@ -49,7 +49,6 @@ impl Manifest {
             },
             Err(e) => fail!("{}", e)
         }
-
     }
 
     pub fn with_options (matches: &Matches) -> Manifest {
@@ -57,7 +56,7 @@ impl Manifest {
 
         match matches.opt_str("f") {
             Some(file) => config.source = Path::new(file),
-            None => {}
+            None => { fail!("no file given") }
         }
 
         match matches.opt_str("o") {
@@ -82,10 +81,6 @@ impl Manifest {
             Err(e) => fail!("{}", e),
             _ => {}
         }
-    }
-
-    fn paths<'a>(&'a mut self) -> &'a Vec<Path> {
-        self.extract_paths()
     }
 
     pub fn extract_paths<'a>(&'a mut self) -> &'a Vec<Path> {
@@ -150,45 +145,38 @@ impl Manifest {
 
     pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
         let mut collector = vec!();
-        for i in self.paths().as_slice().chunks(cores) {
+        for i in self.extract_paths().as_slice().chunks(cores) {
             collector.push(i);
         }
         collector
     }
 }
 
-//impl<'a> Iterator<&'a Path> for Manifest {
-    //fn next(&'a mut self) -> Option<&'a Path> {
-        //Some(self.paths.get(0))
-    //}
-//}
-
 #[cfg(test)]
 mod test {
-    use ManifestConfig;
-    use Manifest;
+    use super::{ManifestConfig,Manifest};
 
     #[test]
     fn test_explicit_json () {
         let mut config = ManifestConfig::new();
-        config.set_path(Path::new("test/explicit.json"));
+        config.source = Path::new("tests/manifest/explicit.json");
 
         let mut manifesto = Manifest::new();
         manifesto.config = config;
 
-        let paths = manifesto.paths();
+        let paths = manifesto.extract_paths();
         assert_eq!(paths.len(), 3);
     }
 
     #[test]
     fn test_wildcards () {
         let mut config = ManifestConfig::new();
-        config.set_path(Path::new("test/wildcards.json"));
+        config.source = Path::new("tests/manifest/wildcards.json");
 
         let mut manifesto = Manifest::new();
         manifesto.config = config;
 
-        let paths = manifesto.paths();
+        let paths = manifesto.extract_paths();
         assert_eq!(paths.len(), 3);
     }
 }
