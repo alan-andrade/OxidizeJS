@@ -10,8 +10,9 @@
 //      "js/bar.js",
 //      "js/*.js"
 // ]
-use std::io::fs::File;
 use getopts::Matches;
+use std::io::{Write, Append};
+use std::io::fs::{File, PathExtensions};
 
 pub struct ManifestConfig {
     key: String,
@@ -31,55 +32,42 @@ impl ManifestConfig {
 
 pub struct Manifest {
     paths: Vec<Path>,
-    config: ManifestConfig,
-    file: File
+    config: ManifestConfig
 }
 
 impl Manifest {
-    pub fn new () -> Manifest {
-        let config = ManifestConfig::new();
-
-        match File::create(&config.output) {
-            Ok(f) => {
-                Manifest {
-                    config: config,
-                    paths: vec!(),
-                    file: f
-                }
-            },
-            Err(e) => fail!("{}", e)
-        }
-    }
-
     pub fn with_options (matches: &Matches) -> Manifest {
         let mut config = ManifestConfig::new();
 
         match matches.opt_str("f") {
             Some(file) => config.source = Path::new(file),
-            None => { fail!("no file given") }
+            None => { fail!("no manifest file given") }
         }
 
         match matches.opt_str("o") {
-            Some(file) => config.output = Path::new(file),
-            None => {}
+            Some(file) => { config.output = Path::new(file) }
+            None => {
+                println!("- Output file defaulting to: {}", config.output.display())
+            }
         }
 
-        match File::create(&config.output) {
-            Ok(f) => {
-                Manifest {
-                    config: config,
-                    paths: vec!(),
-                    file: f
-                }
-            },
-            Err(e) => fail!("{}", e)
+        File::create(&config.output); // Wipes out old file
+
+        Manifest {
+            config: config,
+            paths: vec!()
         }
     }
 
     pub fn write(&mut self, data: &[u8]) {
-        match self.file.write(data) {
-            Err(e) => fail!("{}", e),
-            _ => {}
+        match File::open_mode(&self.config.output, Append, Write) {
+            Ok(mut f) => {
+                match f.write(data) {
+                    Err(e) => fail!("{}", e),
+                    _ => {}
+                }
+            },
+            Err(e) => fail!("{}", e)
         }
     }
 
@@ -161,10 +149,12 @@ mod test {
         let mut config = ManifestConfig::new();
         config.source = Path::new("tests/manifest/explicit.json");
 
-        let mut manifesto = Manifest::new();
-        manifesto.config = config;
+        let mut manifest = Manifest {
+            config: config,
+            paths: vec!()
+        };
 
-        let paths = manifesto.extract_paths();
+        let paths = manifest.extract_paths();
         assert_eq!(paths.len(), 3);
     }
 
@@ -173,10 +163,12 @@ mod test {
         let mut config = ManifestConfig::new();
         config.source = Path::new("tests/manifest/wildcards.json");
 
-        let mut manifesto = Manifest::new();
-        manifesto.config = config;
+        let mut manifest = Manifest {
+            config: config,
+            paths: vec!()
+        };
 
-        let paths = manifesto.extract_paths();
+        let paths = manifest.extract_paths();
         assert_eq!(paths.len(), 3);
     }
 }
