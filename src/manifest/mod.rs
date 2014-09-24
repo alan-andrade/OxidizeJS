@@ -14,129 +14,168 @@ use getopts::Matches;
 use std::io::{Write, Append};
 use std::io::fs::{File, PathExtensions};
 
+static MANIFEST_KEY: &'static str = "manifest";
+
 pub struct ManifestConfig {
-    key: String,
-    pub source: Path,
-    pub output: Path
+    source: Path,
+    output: Path
 }
 
-impl ManifestConfig {
-    pub fn new() -> ManifestConfig {
-        ManifestConfig {
-            key:  String::from_str("manifest"),
-            source: Path::new("manifest.json"),
-            output: Path::new("oxidized.js")
+pub struct Manifest {
+    config: ManifestConfig
+}
+
+pub fn with_options (matches: &Matches) -> Manifest {
+    let source = match matches.opt_str("f") {
+        Some(path) => Path::new(path),
+        None => { fail!("no manifest file given") }
+    };
+
+    let output = match matches.opt_str("o") {
+        Some(path) => { Path::new(path) }
+        None => {
+            let p = Path::new("oxidized.js");
+            println!("- Output file defaulting to: {}", p.display());
+            p
+        }
+    };
+
+    let config = ManifestConfig {
+        source: source,
+        output: output
+    };
+
+    Manifest { config: config }
+}
+
+fn expand(mut paths: Vec<Path>) -> Vec<Path> {
+    use glob::glob;
+
+    let wildcards: Vec<Path> = paths
+        .iter()
+        .skip_while(|path| (**path).is_file())
+        .map(|path| path.clone())
+        .collect();
+
+    paths.retain(|path| path.is_file());
+
+    for wc in wildcards.iter() {
+        for wc_path in glob(wc.as_str().unwrap()) {
+            if  wc_path.extension() == Some("js".as_bytes()) &&
+                 !paths.iter().any(|path| path.filename() == wc_path.filename()) {
+                paths.push(wc_path);
+            }
+        }
+    }
+
+    paths
+}
+
+static CORES: uint = 4;
+
+struct Paths {
+    collection: Vec<Path>,
+    index: uint,
+    per_core: uint
+}
+
+impl Paths {
+    fn new(col: Vec<Path>) -> Paths {
+        Paths {
+            per_core: ((col.len() / CORES) as f32).ceil() as uint,
+            collection: col,
+            index: 0
         }
     }
 }
 
-pub struct Manifest {
-    paths: Vec<Path>,
-    config: ManifestConfig
+impl Iterator<Vec<Path>> for Paths {
+    fn next(&mut self) -> Option<Vec<Path>> {
+        if self.index < self.collection.len() {
+            let current = self.index;
+            self.index  = self.index + self.per_core;
+            Some(self.collection.slice(current, self.index).to_vec())
+        } else {
+            None
+        }
+    }
 }
 
 impl Manifest {
-    pub fn with_options (matches: &Matches) -> Manifest {
-        let mut config = ManifestConfig::new();
+    pub fn paths(&mut self) -> Paths {
+        use serialize::json;
+        use serialize::json::String;
 
-        match matches.opt_str("f") {
-            Some(file) => config.source = Path::new(file),
-            None => { fail!("no manifest file given") }
-        }
+        let mut file = File::open(&self.config.source).unwrap();
 
-        match matches.opt_str("o") {
-            Some(file) => { config.output = Path::new(file) }
-            None => {
-                println!("- Output file defaulting to: {}", config.output.display())
+        let json = match json::from_reader(&mut file as &mut Reader) {
+            Ok(json) => json,
+            Err(e) => fail!("{}", e)
+        };
+
+        let value = match json.find(&MANIFEST_KEY.to_string()) {
+            Some(v) => v,
+            None => fail!("Key {} is missing.", MANIFEST_KEY)
+        };
+
+        let list = match value.as_list() {
+            Some(v) => v,
+            None => fail!("The value of {}, should be an array.", MANIFEST_KEY)
+        };
+
+        let paths = list.iter().map(|item|
+            match item.as_string() {
+                Some(s) => { Path::new(s.as_slice()) }
+                None    => { fail!("couldnt convert to string") }
             }
-        }
+        ).collect();
 
-        File::create(&config.output); // Wipes out old file
-
-        Manifest {
-            config: config,
-            paths: vec!()
-        }
+        Paths::new(expand(paths))
     }
 
     pub fn write(&mut self, data: &[u8]) {
         match File::open_mode(&self.config.output, Append, Write) {
             Ok(mut f) => {
                 match f.write(data) {
-                    Err(e) => fail!("{}", e),
-                    _ => {}
+                    Ok(_) => {},
+                    Err(e) => { fail!("{}", e) }
                 }
             },
             Err(e) => fail!("{}", e)
-        }
-    }
-
-    pub fn extract_paths<'a>(&'a mut self) -> &'a Vec<Path> {
-        use serialize::json;
-        use serialize::json::String;
-
-        match File::open(&self.config.source) {
-            Ok(ref mut file) => {
-                let json = match json::from_reader(file as &mut Reader) {
-                    Ok(json) => json,
-                    Err(e) => fail!("{}", e)
-                };
-
-                let value = match json.find(&self.config.key) {
-                    Some(v) => v,
-                    None => fail!("Key {} is missing.", self.config.key)
-                };
-
-                let list = match value.as_list() {
-                    Some(v) => v,
-                    None => fail!("The value of {}, should be an array.", self.config.key)
-                };
-
-                let paths = list.iter().map(|item|
-                    match *item {
-                        String(ref s) => Path::new(s.as_slice()),
-                        _ => { fail!("couldnt convert to string") }
-                    }
-                ).collect();
-
-                self.paths = paths;
-            },
-            Err(e) => fail!(e)
         };
-
-        self.expand()
     }
 
-    fn expand<'a>(&'a mut self) -> &'a Vec<Path> {
-        use glob::glob;
 
-        let wildcards: Vec<Path> = self.paths
-            .iter()
-            .skip_while(|path| (**path).is_file())
-            .map(|path| path.clone())
-            .collect();
+    //fn expand<'a>(&'a mut self) -> &'a Vec<Path> {
+        //use glob::glob;
 
-        self.paths.retain(|path| path.is_file());
+        //let wildcards: Vec<Path> = self.paths
+            //.iter()
+            //.skip_while(|path| (**path).is_file())
+            //.map(|path| path.clone())
+            //.collect();
 
-        for wc in wildcards.iter() {
-            for wc_path in glob(wc.as_str().unwrap()) {
-                if  wc_path.extension() == Some("js".as_bytes()) &&
-                    !self.paths.iter().any(|path| path.filename() == wc_path.filename()) {
-                    self.paths.push(wc_path);
-                }
-            }
-        }
+        //self.paths.retain(|path| path.is_file());
 
-        &self.paths
-    }
+        //for wc in wildcards.iter() {
+            //for wc_path in glob(wc.as_str().unwrap()) {
+                //if  wc_path.extension() == Some("js".as_bytes()) &&
+                    // !self.paths.iter().any(|path| path.filename() == wc_path.filename()) {
+                    //self.paths.push(wc_path);
+                //}
+            //}
+        //}
 
-    pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
-        let mut collector = vec!();
-        for i in self.extract_paths().as_slice().chunks(cores) {
-            collector.push(i);
-        }
-        collector
-    }
+        //&self.paths
+    //}
+
+    //pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
+        //let mut collector = vec!();
+        //for i in self.paths().as_slice().chunks(cores) {
+            //collector.push(i);
+        //}
+        //collector
+    //}
 }
 
 #[cfg(test)]
@@ -145,29 +184,23 @@ mod test {
 
     #[test]
     fn test_explicit_json () {
-        let mut config = ManifestConfig::new();
-        config.source = Path::new("tests/manifest/explicit.json");
-
-        let mut manifest = Manifest {
-            config: config,
-            paths: vec!()
+        let config = ManifestConfig {
+            source: Path::new("tests/manifest/explicit.json"),
+            output: Path::new("")
         };
 
-        let paths = manifest.extract_paths();
-        assert_eq!(paths.len(), 3);
+        let mut manifest = Manifest { config: config };
+        assert_eq!(manifest.paths().count(), 3);
     }
 
     #[test]
     fn test_wildcards () {
-        let mut config = ManifestConfig::new();
-        config.source = Path::new("tests/manifest/wildcards.json");
-
-        let mut manifest = Manifest {
-            config: config,
-            paths: vec!()
+        let mut config = ManifestConfig {
+            source: Path::new("tests/manifest/wildcards.json"),
+            output: Path::new("")
         };
 
-        let paths = manifest.extract_paths();
-        assert_eq!(paths.len(), 3);
+        let mut manifest = Manifest { config: config };
+        assert_eq!(manifest.paths().count(), 4);
     }
 }
