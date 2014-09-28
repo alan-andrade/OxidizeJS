@@ -1,6 +1,5 @@
 {
   "manifest": [
-    "tests/manifest/js/a.js",
     "tests/manifest/js/*.js"
   ]
 }
