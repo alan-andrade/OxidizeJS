@@ -1,7 +1,7 @@
 (function (root) {
-  if ('undefined' === typeof a) {
+  if ('undefined' === typeof root.a) {
     throw 'This requires that a is defined'
   } else {
-    console.log('It works! Value of a:' a);
+    throw 'root.a is cool'
   }
 })(this)

@@ -32,27 +32,29 @@ fn main () {
 
     let mut manifest = manifest::with_options(&matches);
 
-    //let (tx, rx) = channel();
+    let (tx, rx) = channel();
 
+    let mut counter = 0u;
     for chunks in manifest.paths() {
-        let filenames = chunks.
+        let filenames: Vec<&str> = chunks.
             iter().
-            map(|c| c.filename_str().unwrap()).
+            map(|c| c.as_str().unwrap()).
             collect();
 
-        println!("processing: {:?}", filenames);
-        //tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
+        println!("processing: {:?}", filenames.as_slice());
+        counter += 1u;
+        tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
     }
 
-    //for _ in chunks {
-        //match rx.recv() {
-            //Ok(process) => {
-                //match process.wait_with_output() {
-                    //Ok(p) => manifest.write(p.output.as_slice()),
-                    //Err(e) => fail!("{}", e)
-                //};
-            //},
-            //Err(f) => fail!("{}", f)
-        //}
-    //}
+    for _ in  range(0u, counter) {
+        match rx.recv() {
+            Ok(process) => {
+                match process.wait_with_output() {
+                    Ok(p) => manifest.write(p.output.as_slice()),
+                    Err(e) => fail!("{}", e)
+                };
+            },
+            Err(f) => fail!("{}", f)
+        }
+    }
 }

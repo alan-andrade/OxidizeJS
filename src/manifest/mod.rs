@@ -12,7 +12,7 @@
 // ]
 use getopts::Matches;
 use std::io::{Write, Append};
-use std::io::fs::{File, PathExtensions};
+use std::io::fs::{File, PathExtensions, unlink};
 
 static MANIFEST_KEY: &'static str = "manifest";
 
@@ -22,10 +22,11 @@ pub struct ManifestConfig {
 }
 
 pub struct Manifest {
-    config: ManifestConfig
+    config: ManifestConfig,
+    paths: Vec<Path>
 }
 
-pub fn with_options (matches: &Matches) -> Manifest {
+pub fn with_options(matches: &Matches) -> Manifest {
     let source = match matches.opt_str("f") {
         Some(path) => Path::new(path),
         None => { fail!("no manifest file given") }
@@ -40,73 +41,20 @@ pub fn with_options (matches: &Matches) -> Manifest {
         }
     };
 
+    unlink(&output);
+
     let config = ManifestConfig {
         source: source,
         output: output
     };
 
-    Manifest { config: config }
+    Manifest::new(config)
 }
 
-fn expand(mut paths: Vec<Path>) -> Vec<Path> {
-    use glob::glob;
-
-    let wildcards: Vec<Path> = paths
-        .iter()
-        .skip_while(|path| (**path).is_file())
-        .map(|path| path.clone())
-        .collect();
-
-    paths.retain(|path| path.is_file());
-
-    for wc in wildcards.iter() {
-        for wc_path in glob(wc.as_str().unwrap()) {
-            if  wc_path.extension() == Some("js".as_bytes()) &&
-                 !paths.iter().any(|path| path.filename() == wc_path.filename()) {
-                paths.push(wc_path);
-            }
-        }
-    }
-
-    paths
-}
-
-static CORES: uint = 4;
-
-struct Paths {
-    collection: Vec<Path>,
-    index: uint,
-    per_core: uint
-}
-
-impl Paths {
-    fn new(col: Vec<Path>) -> Paths {
-        Paths {
-            per_core: ((col.len() / CORES) as f32).ceil() as uint,
-            collection: col,
-            index: 0
-        }
-    }
-}
-
-impl Iterator<Vec<Path>> for Paths {
-    fn next(&mut self) -> Option<Vec<Path>> {
-        if self.index < self.collection.len() {
-            let current = self.index;
-            self.index  = self.index + self.per_core;
-            Some(self.collection.slice(current, self.index).to_vec())
-        } else {
-            None
-        }
-    }
-}
-
-impl Manifest {
-    pub fn paths(&mut self) -> Paths {
+fn get_all_paths(config: &ManifestConfig) -> Vec<Path> {
         use serialize::json;
-        use serialize::json::String;
 
-        let mut file = File::open(&self.config.source).unwrap();
+        let mut file = File::open(&config.source).unwrap();
 
         let json = match json::from_reader(&mut file as &mut Reader) {
             Ok(json) => json,
@@ -130,52 +78,86 @@ impl Manifest {
             }
         ).collect();
 
-        Paths::new(expand(paths))
+        expand(paths)
+}
+
+fn expand(mut paths: Vec<Path>) -> Vec<Path> {
+    use glob::glob;
+
+    let wildcards: Vec<Path> = paths
+        .iter()
+        .skip_while(|path| (**path).is_file())
+        .map(|path| path.clone())
+        .collect();
+
+    paths.retain(|path| path.is_file() && path.exists() );
+
+    for wc in wildcards.iter() {
+        for wc_path in glob(wc.as_str().unwrap()) {
+            if  wc_path.extension() == Some("js".as_bytes()) &&
+                 !paths.iter().any(|path| path.filename() == wc_path.filename()) {
+                paths.push(wc_path);
+            }
+        }
+    }
+
+    paths
+}
+
+static CORES: uint = 4;
+
+struct Paths<'a, T: 'static> {
+    collection: &'a [T],
+    index: uint,
+    per_core: uint
+}
+
+impl<'a, T> Paths<'a, T> {
+    fn new(col: &'a [T]) -> Paths<'a, T> {
+        Paths {
+            per_core: (col.len() as f32 / CORES as f32).ceil() as uint,
+            collection: col,
+            index: 0
+        }
+    }
+}
+
+impl<'a, T> Iterator<&'a [T]> for Paths<'a, T> {
+    fn next(&mut self) -> Option<&'a [T]> {
+        if self.index < self.collection.len() && self.per_core > 0 {
+            let current = self.index;
+            self.index  = self.index + self.per_core;
+            Some(self.collection.slice(current, self.index))
+        } else {
+            None
+        }
+    }
+}
+
+impl Manifest {
+    fn new(c: ManifestConfig) -> Manifest {
+        Manifest {
+            paths: get_all_paths(&c),
+            config: c
+        }
+    }
+
+    pub fn paths<'a>(&'a mut self) -> Paths<'a, Path> {
+        Paths::new(self.paths.as_slice())
     }
 
     pub fn write(&mut self, data: &[u8]) {
-        match File::open_mode(&self.config.output, Append, Write) {
-            Ok(mut f) => {
-                match f.write(data) {
-                    Ok(_) => {},
-                    Err(e) => { fail!("{}", e) }
-                }
-            },
-            Err(e) => fail!("{}", e)
+        let mut file = if self.config.output.is_file() {
+            File::open_mode(&self.config.output, Append, Write)
+        } else {
+            File::create(&self.config.output)
         };
+
+        match file.write(data) {
+            Ok(_) => {},
+            Err(e) => fail!("Couldnt write to file: {}", e)
+        }
     }
-
-
-    //fn expand<'a>(&'a mut self) -> &'a Vec<Path> {
-        //use glob::glob;
-
-        //let wildcards: Vec<Path> = self.paths
-            //.iter()
-            //.skip_while(|path| (**path).is_file())
-            //.map(|path| path.clone())
-            //.collect();
-
-        //self.paths.retain(|path| path.is_file());
-
-        //for wc in wildcards.iter() {
-            //for wc_path in glob(wc.as_str().unwrap()) {
-                //if  wc_path.extension() == Some("js".as_bytes()) &&
-                    // !self.paths.iter().any(|path| path.filename() == wc_path.filename()) {
-                    //self.paths.push(wc_path);
-                //}
-            //}
-        //}
-
-        //&self.paths
-    //}
-
-    //pub fn split<'a> (&'a mut self, cores: uint) -> Vec<&'a [Path]> {
-        //let mut collector = vec!();
-        //for i in self.paths().as_slice().chunks(cores) {
-            //collector.push(i);
-        //}
-        //collector
-    //}
 }
 
 #[cfg(test)]
