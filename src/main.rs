@@ -8,7 +8,7 @@ use std::io::Command;
 use std::os;
 use getopts::{usage, optopt, getopts, optflag};
 
-mod manifest;
+pub mod manifest;
 
 fn main () {
     let args = os::args();
