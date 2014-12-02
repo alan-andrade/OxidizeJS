@@ -1,60 +1,56 @@
-extern crate getopts;
-extern crate glob;
-extern crate serialize;
-extern crate debug;
+#![feature(phase)]
+#[phase(plugin, link)] extern crate log;
 
-use std::comm::channel;
-use std::io::Command;
-use std::os;
-use getopts::{usage, optopt, getopts, optflag};
+use std::io::process::Command;
+use manifest::Manifest;
+use std::io::net::pipe::UnixStream;
+use std::io::File;
 
-pub mod manifest;
+mod manifest;
 
 fn main () {
-    let args = os::args();
-    let program = args[0].clone();
+    // First runs spidermonkey parser
+    let source_code = ["Reflect.parse(", ");"];
 
-    let options = [
-        optopt("f", "file", "defaults to manifest.json", "input file"),
-        optopt("o", "output", "output file", ""),
-        optflag("h", "help", "Prints this message")
-    ];
+    let mut manifest = Manifest::new();
 
-    let matches = match getopts(args.tail(), options) {
-        Ok(res) => res,
-        Err(e) => fail!("{}", e)
+    // Might need to escape quotation marks here.
+    let content  = match manifest.read_to_string() {
+        Ok(c) => c,
+        Err(e) => panic!(e)
     };
 
-    if matches.opt_present("h") {
-        println!("{}", usage(program.as_slice(), options));
-        return
-    }
+    println!("js gotten: {}", content);
 
-    let mut manifest = manifest::with_options(&matches);
+    let source_code =
+        format!(
+            "'print(JSON.stringify(Reflect.parse(\"{}\")))'",
+            content);
 
-    let (tx, rx) = channel();
+    println!("Source code: \n{}", source_code);
 
-    let mut counter = 0u;
-    for chunks in manifest.paths() {
-        let filenames: Vec<&str> = chunks.
-            iter().
-            map(|c| c.as_str().unwrap()).
-            collect();
+    let stdout = Command::new("uname").arg("-v").output().ok().unwrap();
 
-        println!("processing: {:?}", filenames.as_slice());
-        counter += 1u;
-        tx.send(Command::new("uglifyjs").args(filenames.as_slice()).spawn());
-    }
+    println!("uname: {}", String::from_utf8_lossy(stdout.output.as_slice()))
 
-    for _ in  range(0u, counter) {
-        match rx.recv() {
-            Ok(process) => {
-                match process.wait_with_output() {
-                    Ok(p) => manifest.write(p.output.as_slice()),
-                    Err(e) => fail!("{}", e)
-                };
-            },
-            Err(f) => fail!("{}", f)
-        }
-    }
+    //let file_path = Path::new("~/.oxidize.out");
+    //let output_file = File::create(&file_path);
+
+    //let command = Command::new("js").
+        //arg("-e").
+        //arg(source_code.as_slice()).
+        //env("JS_STDOUT", file_path.clone()).
+        //spawn().
+        //ok().
+        //unwrap();
+
+    //let mut file = File::open(&file_path);
+    //let ast = file.read_to_string().ok().unwrap();
+
+    //println!("ast: {}", ast);
+
+    //match Command::new("js").args(&["-e", source_code.as_slice()]).output() {
+        //Ok(output) => println!("output: {}", output.output),
+        //Err(e) => println!("ererer: {}", e)
+    //}
 }
