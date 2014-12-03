@@ -1,3 +1,5 @@
 *.rlib
 /target
-oxidized.js
+.oxidize-error
+.oxidize-out
+.oxidize-source
