@@ -14,7 +14,7 @@ fn main () {
     let content  = match manifest.read_to_string() {
         Ok(c) => {
             let mut bytes = c.into_bytes();
-            bytes.retain(|&c| c != 10); // Remove LF
+            bytes.retain(|&c| c != 0 && c != 10 && c != 11); // Remove LF
             String::from_utf8(bytes).unwrap()
         }
         Err(e) => panic!(e)
