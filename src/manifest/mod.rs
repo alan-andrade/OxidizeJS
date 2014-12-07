@@ -62,7 +62,7 @@ impl Reader for Manifest {
             Ok(json) => {
                 let root = match json.find(JSON_ROOT) {
                     Some(r) => r,
-                    None => panic!("No root found!")
+                    None => panic!("JSON root not found.")
                 };
 
                 let file_list = root.as_array().unwrap();
@@ -80,6 +80,8 @@ impl Reader for Manifest {
                     }
                 }
 
+                println!("buf size: {}", buf.len())
+                println!("buffer size: {}", buffer.len())
                 copy_memory(buf, buffer.as_slice());
                 Ok(buf.len())
             },

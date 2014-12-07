@@ -13,8 +13,13 @@ fn main () {
     // Might need to escape quotation marks here.
     let content  = match manifest.read_to_string() {
         Ok(c) => {
+            println!("asdf")
             let mut bytes = c.into_bytes();
             bytes.retain(|&c| c != 0 && c != 10 && c != 11); // Remove LF
+
+            //' becomes \x27
+            //" becomes \x22
+
             String::from_utf8(bytes).unwrap()
         }
         Err(e) => panic!(e)
