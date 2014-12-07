@@ -21,8 +21,10 @@ fn main () {
     };
     println!("js from manifest: {}", content);
 
-    let source_code =
-        format!("print(JSON.stringify(Reflect.parse(\"{}\")))\n", content);
+    let source_code = format!("print(
+        JSON.stringify(
+            Reflect.parse(\"{}\")
+        ));\n", content);
 
     println!("Source code: \n{}", source_code);
     let source_code_path = Path::new(".oxidize-source");
@@ -40,9 +42,31 @@ fn main () {
                 Err(e) => panic!(e)
             }
 
+
     let result =
         match File::open(&ast_path) {
-            Ok(mut f) => f.read_to_string().ok().unwrap(),
+            Ok(mut f) => {
+                let ast = f.read_to_string().ok().unwrap();
+                println!("ast: {}", ast);
+                let code = format!("
+                    var esmangle  = require('esmangle')
+                      , escodegen = require('escodegen');
+
+                    var minified = esmangle.mangle({});
+                    console.log(escodegen.generate(minified))
+                ", ast);
+
+                let mut minify = File::create(&Path::new(".oxidize-minify")).ok().unwrap();
+                minify.write(code.as_bytes());
+
+                let output = Command::new("node").
+                    arg(".oxidize-minify").
+                    output().
+                    unwrap().
+                    output;
+
+                String::from_utf8(output).unwrap()
+            }
             Err(e) => panic!("{}", e)
         };
 

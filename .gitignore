@@ -1,5 +1,3 @@
 *.rlib
 /target
-.oxidize-error
-.oxidize-out
-.oxidize-source
+.oxidize-*
